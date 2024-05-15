@@ -5,17 +5,10 @@ local _ = require("gettext")
 
 local queryChatGPT = require("gpt_query")
 
-local function showChatGPTDialog(ui, highlightedText, message_history)
-  local title, author =
-      ui.document:getProps().title or _("Unknown Title"),
-      ui.document:getProps().authors or _("Unknown Author")
-  local message_history = message_history or {
-    {
-      role = "system",
-      content =
-      "The following is a conversation with an AI assistant. The assistant is helpful, creative, clever, and very friendly. Answer as concisely as possible.",
-    },
-  }
+local function showChatGPTDialog(ui, highlightedText)
+  local title = ui.document:getProps().title or _("Unknown Title")
+  local author = ui.document:getProps().authors or _("Unknown Author")
+
   local input_dialog
   input_dialog = InputDialog:new {
     title = _("Ask a question about the highlighted text"),
@@ -39,72 +32,37 @@ local function showChatGPTDialog(ui, highlightedText, message_history)
             }
             UIManager:show(loading)
 
-            -- Give context to the question
-            local context_message = {
-              role = "user",
-              content = "I'm reading something titled '" ..
-                  title ..
-                  "' by " .. author .. ". I have a question about the following highlighted text: " .. highlightedText,
-            }
-            table.insert(message_history, context_message)
-
-            -- Ask the question
+            -- Construct the prompt
+            local context = "I'm reading something titled '" .. title .. "' by " .. author ..
+                            ". I have a question about the following highlighted text: " .. highlightedText
             local question = input_dialog:getInputText()
-            local question_message = {
-              role = "user",
-              content = question,
-            }
-            table.insert(message_history, question_message)
+            local prompt = context .. "\n\nUser: " .. question
 
-            local answer = queryChatGPT(message_history)
-            -- Save the answer to the message history
-            local answer_message = {
-              role = "assistant",
-              content = answer,
-            }
+            -- Query ChatGPT
+            local answer = queryChatGPT(prompt)
 
-            table.insert(message_history, answer_message)
+            UIManager:close(loading)
             UIManager:close(input_dialog)
+
+            -- Create the result text
             local result_text = _("Highlighted text: ") .. "\"" .. highlightedText .. "\"" ..
-                "\n\n" .. _("User: ") .. question ..
-                "\n\n" .. _("ChatGPT: ") .. answer
+                                "\n\n" .. _("User: ") .. question ..
+                                "\n\n" .. _("ChatGPT: ") .. answer
 
-            local function createResultText(highlightedText, message_history)
-              local result_text = _("Highlighted text: ") .. "\"" .. highlightedText .. "\"\n\n"
-
-              for i = 3, #message_history do
-                if message_history[i].role == "user" then
-                  result_text = result_text .. _("User: ") .. message_history[i].content .. "\n\n"
-                else
-                  result_text = result_text .. _("ChatGPT: ") .. message_history[i].content .. "\n\n"
-                end
-              end
-
-              return result_text
-            end
-
-
-            local function handleNewQuestion(chatgpt_viewer, question)
-              -- Add the new question to the message history
-              table.insert(message_history, { role = "user", content = question })
-
-              -- Send the query to ChatGPT with the updated message_history
-              local answer = queryChatGPT(message_history)
-
-              -- Add the answer to the message history
-              table.insert(message_history, { role = "assistant", content = answer })
-
-              -- Update the result text
-              local result_text = createResultText(highlightedText, message_history)
-
-              -- Update the text and refresh the viewer
+            -- Function to handle new questions
+            local function handleNewQuestion(chatgpt_viewer, new_question)
+              local new_prompt = context .. "\n\nUser: " .. new_question
+              local new_answer = queryChatGPT(new_prompt)
+              result_text = result_text .. "\n\n" .. _("User: ") .. new_question ..
+                            "\n\n" .. _("ChatGPT: ") .. new_answer
               chatgpt_viewer:update(result_text)
             end
 
+            -- Show the viewer with the result
             local chatgpt_viewer = ChatGPTViewer:new {
-              title = _("AskGPT"),
+              title = _("AskKoboldCpp"),
               text = result_text,
-              onAskQuestion = handleNewQuestion, -- Pass the callback function
+              onAskQuestion = handleNewQuestion,
             }
 
             UIManager:show(chatgpt_viewer)

@@ -1,38 +1,40 @@
-local API_KEY = require("api_key")
-local https = require("ssl.https")
+local http = require("socket.http")
 local ltn12 = require("ltn12")
 local json = require("json")
 
-local function queryChatGPT(message_history)
-  local api_key = API_KEY.key
-  local api_url = "https://api.openai.com/v1/chat/completions"
-
-  local headers = {
-    ["Content-Type"] = "application/json",
-    ["Authorization"] = "Bearer " .. api_key,
-  }
+local function queryChatGPT(prompt)
+  local api_url = "http://localhost:5001/api/v1/generate"
 
   local requestBody = json.encode({
-    model = "gpt-3.5-turbo",
-    messages = message_history,
+    prompt = prompt,
+    max_length = 250
   })
 
   local responseBody = {}
 
-  local res, code, responseHeaders = https.request {
+  local res, code = http.request {
     url = api_url,
     method = "POST",
-    headers = headers,
     source = ltn12.source.string(requestBody),
     sink = ltn12.sink.table(responseBody),
+    headers = {
+      ["Content-Type"] = "application/json",
+      ["Content-Length"] = tostring(#requestBody)
+    }
   }
 
+  if not res then
+    error("HTTP request failed: " .. (code or "unknown error"))
+  end
+
   if code ~= 200 then
-    error("Error querying ChatGPT API: " .. code)
+    print("Response code: " .. code)
+    print("Response body: " .. table.concat(responseBody))
+    error("Error querying API: " .. code)
   end
 
   local response = json.decode(table.concat(responseBody))
-  return response.choices[1].message.content
+  return response.results[1].text
 end
 
 return queryChatGPT
